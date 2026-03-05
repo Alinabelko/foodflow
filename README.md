@@ -189,7 +189,7 @@ foodflow/
 | "Купил молоко и яйца" | Shopping Agent | update_inventory -> fridge.csv |
 | "Что приготовить на ужин?" | Menu Agent | Plan + Validate (аллергии, сроки) + сохранение |
 | "Добавь лук в список покупок" | Shopping Agent | manage_shopping_list add |
-| "Жена без глютена, сын аллергик на орехи" | Router (local) | update_person_info x2 |
+| "Жена не ест глютен, сын аллергик на орехи" | Router (local) | update_person_info x2 |
 | "Запланируй питание на неделю" | Menu Agent | MultiDayMealPlan (7 итераций) |
 | "Есть ли гречка в Пятёрочке?" | Shopping Agent | StoreAdapter.search_product() -> ответ с ценой и наличием |
 
