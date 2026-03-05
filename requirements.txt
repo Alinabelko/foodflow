@@ -1,0 +1,9 @@
+openai
+python-telegram-bot
+pandas
+python-dotenv
+pillow
+streamlit
+fastapi
+uvicorn
+python-multipart
