@@ -1,62 +1,200 @@
-# FoodFlow Agent
+# FoodFlow —  планирование питания
+FIY Проект когда-то был навайбкожен за 2 вечера, но работает плохо, особенно в плане разнообразия предлагаемого меню, реалистичной сложности блюд, оценки количества ингридиентов (модель может предлагать сделать несколько блюд из одного овоща например) и тд. В рамках курса было желание его доработать.
 
-FoodFlow is an intelligent nutrition control system powered by OpenAI agents. It helps you manage your pantry, fridge, and diet plans through a simple Telegram interface.
 
-## Features
+> PoC агентной системы управления питанием домохозяйства на базе мультиагентной архитектуры с LLM-оркестрацией.
 
-- **Agent-based Data Analysis**: Automatically extracts information from your messages (e.g., "I bought milk") to update its databases.
-- **Inventory Management**: Tracks Fridge, Pantry, and Freezer items with expiry dates.
-- **Dietary & Health Profile**: Remembers family allergies, health issues, and goals.
-- **Meal Planning & Shopping Lists**: Generates plans based on what you have and what you like.
-- **Image Recognition**: Can analyze photos of your fridge or groceries (via GPT-4o Vision).
+---
 
-## Setup
+## Что за задача, для кого и какая боль сейчас
 
-1. **Install Dependencies**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # or venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   ```
+**Для кого:** Домохозяйства (1–5 человек), которые хотят питаться осознанно — без потерь продуктов, с учётом диет, аллергий и целей по здоровью.
 
-2. **Environment Variables**
-   Rename `.env.example` to `.env` and fill in your keys:
-   - `OPENAI_API_KEY`: Your OpenAI API key.
-   - `TELEGRAM_TOKEN`: Your Telegram Bot Token (from @BotFather).
+**Боль сегодня:**
 
-3. **Run the Application**
-   - **Backend**:
-     ```bash
-     python src/server.py
-     ```
-   - **Frontend**:
-     ```bash
-     cd frontend
-     npm run dev
-     ```
+- Ежедневная трата мыслительных ресурсов на решения "что бы поесть сегодня, чтобы и полезно, и продукты не испортились, и не надоело и с учетом времени и предпочтений членов семьи"
+- Частое выбрасывание продуктов из-за того что их не успели съесть или не успели что-то из них приготовить.
+- Список покупок требует составление плана заранее - что планируется готовить, сколько будет время, но этот план не всегда совпадает с реальностью.
+- Диеты и медицинские ограничения (аллергии, диабет, похудение) сложно учитывать вручную каждый день.
+- Информация разрознена: одно приложение для рецептов, другое для списка покупок, третье для КБЖУ — они не связаны между собой.
 
-## Usage
+**Ценность системы:** Единый разговорный агент, который знает состав холодильника, предпочтения каждого члена семьи, планирует меню, следит за сроками годности и автоматически формирует список покупок.
 
-- **Web Interface**:
-  - Open http://localhost:5173
-  - **Chat**: Talk to the bot, upload images of your food/fridge.
-  - **Data**: View and edit your inventory and preferences in the Data tab.
-  - **Settings**: Change language in the sidebar.
+---
 
-- **Telegram**:
-  - Just talk to the bot.
-  - "I bought 2kg of chicken breast and a dozen eggs."
-  - "My son is allergic to peanuts."
-  - "What can I cook with what I have in the fridge?"
-- **Images**: Send a photo of your groceries or fridge to automatically catalog items (functionality depends on specific prompt tuning).
+## Что именно сделает PoC на демо
 
-## Project Structure
+1. **Пополнение инвентаря через чат** — пользователь пишет "купил 2 кг курицы и 12 яиц", агент обновляет базу без дополнительных вопросов.
+2. **Умное планирование меню** — цикл Plan → Validate → Refine (до 3 попыток): агент составляет план на N дней с учётом того, что срок годности продуктов истекает, семейных аллергий и целей по питанию.
+3. **Сверка с магазинами** — агент проверяет наличие нужных продуктов и готовых блюд на сайтах супермаркетов (Пятёрочка, Лента, Перекрёсток и др.). Архитектура построена на абстракции `StoreAdapter`: любой магазин подключается одним классом без изменений в агентах.
+4. **Автоматический список покупок** — при планировании меню недостающие ингредиенты автоматически добавляются в shopping list.
+5. **Трекинг КБЖУ** — отдельный журнал питания (`nutrition_log.csv`) с данными по калориям, белкам, жирам и углеводам через [Open Food Facts](https://world.openfoodfacts.org/).
+6. **Блюда ротации** — пользователь отмечает блюда как "регулярные" (гречка на завтрак, куриный суп по воскресеньям). Агент предпочитает их при прочих равных, но правило повторов действует в полную силу — предлагать подряд нельзя, если пользователь явно не указал частоту.
+7. **Управление профилями семьи** — хранение аллергий, диетических ограничений и целей для каждого члена домохозяйства.
+8. **Многопользовательские аккаунты** — каждый пользователь имеет изолированный профиль и данные; совместный доступ к домохозяйству через приглашение.
+8. **Веб-дашборд** — просмотр и ручное редактирование инвентаря, плана питания и списка покупок через React-интерфейс.
+9. **Мультиязычность** — переключение языка интерфейса и перевод базы данных через API.
 
-- `src/`: Source code
-  - `agent.py`: Core logic interacting with OpenAI.
-  - `data_manager.py`: Handles CSV database operations.
-  - `main.py`: Telegram bot interface.
-- `data/`: CSV files (generated automatically).
+**Демо-сценарий (happy path):**
 
-## License
-Open Source.
+```
+1. Пользователь: "Купил молоко, гречку и куриное филе, срок годности до 10 марта"
+   -> Агент: обновил fridge.csv, подтвердил
+
+2. Пользователь: "Спланируй питание на 3 дня для меня и жены, хочу рыбу"
+   -> RouterAgent -> MenuAgent:
+      1. ContextAssembler собирает состояние:
+         - fridge: куриное филе (срок до 10 марта — использовать первым!), молоко
+         - history: гречка была вчера и позавчера — не повторять
+         - profiles: жена не ест камбалу но любит лосось
+      2. Генерирует MultiDayMealPlan на 3 дня: приоритет курице и рыбе
+         блюда не повторяются с последними 5 днями если эти продукты уже кончились и пользователь явно не указывал что предпочитает их каждый день
+      3. ValidatorAgent проверяет каждый день по ограничениям
+      4. При нарушении — уточняет и перегенерирует (до 3 попыток на день)
+      5. Сохраняет план, добавляет 2 недостающих ингредиента в shopping_list.csv
+
+3. Пользователь: "Пообедал борщом"
+   -> Агент: залогировал ~350 ккал в history.csv, убрал использованные продукты
+```
+
+---
+
+## Что НЕ делает PoC (явный out-of-scope)
+
+| Out-of-scope | Почему |
+|---|---|
+| Автоматический заказ / доставка из магазинов |
+| Сканирование штрихкодов продуктов | Нужен мобильный клиент с камерой — не включено в MVP |
+| Медицинские рекомендации как диагноз | Система не является медицинским ПО; аллергии учитываются, но не заменяют врача |
+| Мобильное приложение | Только web-интерфейс | Сроки годности оцениваются примерно |
+| Точные КБЖУ для составных блюд | Open Food Facts покрывает продукты, но не рецепты — данные по сложным блюдам недоступны |
+| Нет аналитики привычек и рекомендаций | Telegram bot |
+
+---
+
+## Архитектура системы
+
+```
+User (Web)
+        |
+        v
+  RouterAgent  <-- Orchestrator
+  /           \
+MenuAgent   ShoppingAgent
+  |               |
+ValidatorAgent  StoreAdapter (interface)
+  |               ├── PyaterochkaAdapter
+ContextAssembler  ├── LentaAdapter
+  |               └── ... (любой супермаркет)
+DataManager (CSV: fridge, pantry, freezer, people, recipes,
+             dishes [рейтинги + флаг rotation для безопасных блюд],
+             history [что ели — для избегания повторов],
+             nutrition_log [КБЖУ — для трекинга питания],
+             shopping_list)
+         |
+  Open Food Facts API  (КБЖУ для продуктов)
+```
+
+**StoreAdapter** — единый интерфейс для подключения магазинов. Каждый адаптер реализует два метода: `search_product(name)` и `search_dish(name)`, возвращая цену с сайта супермаркета. ShoppingAgent вызывает нужный адаптер при формировании списка покупок — агентский код не меняется при добавлении нового магазина.
+
+**Стек:**
+- Backend: Python, FastAPI, OpenAI SDK (Function Calling + Structured Outputs)
+- Frontend: React + Vite
+- Интерфейсы: REST API, Telegram Bot (python-telegram-bot)
+- Хранилище: CSV-файлы (data/)
+- LLM: OpenAI API — мощная модель с reasoning для планирования/валидации, быстрая модель для маршрутизации и простых операций
+
+---
+
+## Быстрый старт
+
+### Требования
+- Python 3.10+
+- Node.js 18+
+- OpenAI API Key
+
+### Установка
+
+```bash
+# 1. Клонировать репозиторий
+git clone <repo-url>
+cd foodflow
+
+# 2. Установить Python-зависимости
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# 3. Настроить переменные окружения
+cp .env.example .env
+# Заполнить OPENAI_API_KEY и TELEGRAM_TOKEN в .env
+
+# 4. Запустить бэкенд
+python src/server.py
+
+# 5. Запустить фронтенд (в отдельном терминале)
+cd frontend
+npm install
+npm run dev
+```
+
+Открыть: http://localhost:5173
+
+### Telegram-бот (опционально)
+
+```bash
+python src/main.py
+```
+
+---
+
+## Структура проекта
+
+```
+foodflow/
+├── src/
+│   ├── server.py              # FastAPI-сервер (REST API)
+│   ├── main.py                # Telegram Bot
+│   ├── agent.py               # Legacy single-agent (deprecated)
+│   ├── data_manager.py        # CRUD для CSV-базы
+│   ├── context.py             # ContextAssembler — снимок состояния для агентов
+│   ├── models.py              # Pydantic-модели (MealPlan, ValidationReport)
+│   ├── agents/
+│   │   ├── base.py            # Базовый класс агента
+│   │   ├── router_agent.py    # Оркестратор (маршрутизация)
+│   │   ├── menu_agent.py      # Планировщик меню + цикл валидации
+│   │   ├── shopping_agent.py  # Управление покупками и инвентарём
+│   │   └── validator_agent.py # LLM-валидатор плана питания
+│   ├── nutrition.py           # Open Food Facts клиент для трекинга КБЖУ
+│   ├── store_adapters/        # Интеграции с сайтами супермаркетов
+│   │   ├── base.py            # StoreAdapter (абстрактный интерфейс)
+│   │   ├── pyaterochka.py     # Пятёрочка
+│   │   └── lenta.py           # Лента
+│   └── prompts/               # Системные промпты агентов
+├── frontend/                  # React + Vite веб-интерфейс
+│   └── src/
+│       ├── components/        # ChatInterface, Dashboard, DataEditor
+│       └── translations.js    # i18n (EN/RU)
+├── data/                      # CSV-файлы (создаются автоматически)
+├── .env.example
+└── requirements.txt
+```
+
+---
+
+## Ключевые сценарии использования
+
+| Запрос пользователя | Какой агент | Что происходит |
+|---|---|---|
+| "Купил молоко и яйца" | Shopping Agent | update_inventory -> fridge.csv |
+| "Что приготовить на ужин?" | Menu Agent | Plan + Validate (аллергии, сроки) + сохранение |
+| "Добавь лук в список покупок" | Shopping Agent | manage_shopping_list add |
+| "Жена без глютена, сын аллергик на орехи" | Router (local) | update_person_info x2 |
+| "Запланируй питание на неделю" | Menu Agent | MultiDayMealPlan (7 итераций) |
+| "Есть ли гречка в Пятёрочке?" | Shopping Agent | StoreAdapter.search_product() -> ответ с ценой и наличием |
+
+---
+
+## Лицензия
+
+Open Source — MIT.
