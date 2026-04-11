@@ -69,7 +69,7 @@ class RouterAgent(BaseAgent):
                 "type": "function",
                 "function": {
                     "name": "log_history",
-                    "description": "Log what was eaten or bought to history.",
+                    "description": "Log what was eaten or bought to history. ALWAYS estimate and fill calories, protein, fats, carbs for eaten meals.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -77,12 +77,28 @@ class RouterAgent(BaseAgent):
                             "action": {"type": "string", "enum": ["eaten", "bought"]},
                             "date": {"type": "string", "description": "YYYY-MM-DD"},
                             "quantity": {"type": "string"},
-                            "calories": {"type": "integer"},
-                            "protein": {"type": "integer"},
-                            "fats": {"type": "integer"},
-                            "carbs": {"type": "integer"}
+                            "calories": {"type": "integer", "description": "Estimated calories, MUST be filled for eaten meals"},
+                            "protein": {"type": "integer", "description": "Estimated protein in grams, MUST be filled for eaten meals"},
+                            "fats": {"type": "integer", "description": "Estimated fats in grams, MUST be filled for eaten meals"},
+                            "carbs": {"type": "integer", "description": "Estimated carbs in grams, MUST be filled for eaten meals"}
                         },
-                        "required": ["item", "action", "date"]
+                        "required": ["item", "action", "date", "calories", "protein", "fats", "carbs"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_dish_preference",
+                    "description": "Save a dish rating, preference, or 'remember I like X' type request. Use when the user mentions liking a dish, rating it, or wanting to remember it as a regular meal.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Dish name"},
+                            "rating": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Rating 1-10"},
+                            "comments": {"type": "string", "description": "User comments or preference note"}
+                        },
+                        "required": ["name"]
                     }
                 }
             }
@@ -106,6 +122,13 @@ class RouterAgent(BaseAgent):
             elif func_name == "log_history":
                 self.dm.add_entry('history.csv', args)
                 output = "Logged history."
+
+            elif func_name == "save_dish_preference":
+                if self.dm.update_entry('dishes.csv', 'name', args['name'], args):
+                    output = f"Updated dish preference for {args['name']}."
+                else:
+                    self.dm.add_entry('dishes.csv', args)
+                    output = f"Saved dish preference for {args['name']}."
             
             results.append({
                 "tool_call_id": tool_call.id,
