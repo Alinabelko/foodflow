@@ -7,7 +7,11 @@ from typing import List, Dict, Optional, Any
 class BaseAgent:
     def __init__(self, data_manager: DataManager):
         self.dm = data_manager
-        self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.client = OpenAI(
+            api_key=os.getenv("OPENAI_API_KEY"),
+            max_retries=int(os.getenv("OPENAI_MAX_RETRIES", "3")),
+            timeout=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30")),
+        )
         self.model = "gpt-5-mini"
 
     def _load_prompt(self, filename: str) -> str:

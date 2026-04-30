@@ -1,9 +1,12 @@
 import os
 import shutil
+import tempfile
+from pathlib import Path
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 from data_manager import DataManager
 from agents.router_agent import RouterAgent
 from dotenv import load_dotenv
@@ -29,6 +32,20 @@ class ChatRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     language: str
+
+def _upload_suffix(filename: Optional[str]) -> str:
+    suffix = Path(filename or "").suffix.lower()
+    return suffix if suffix and len(suffix) <= 10 else ".jpg"
+
+def _save_upload_to_temp(image: UploadFile) -> str:
+    with tempfile.NamedTemporaryFile(
+        mode="wb",
+        delete=False,
+        prefix="foodflow_",
+        suffix=_upload_suffix(image.filename),
+    ) as buffer:
+        shutil.copyfileobj(image.file, buffer)
+        return buffer.name
 
 @app.get("/api/data/{filename}")
 async def get_data(filename: str):
@@ -66,8 +83,7 @@ async def save_settings(settings: SettingsRequest):
 async def translate_database(settings: SettingsRequest):
     # Depending on load, this might timeout. In prod, background task.
     # For now, simplistic sync wait.
-    agent.translate_database(settings.language)
-    agent.translate_database(settings.language)
+    await run_in_threadpool(agent.translate_database, settings.language)
     return {"status": "success"}
 
 @app.post("/api/clear_chat")
@@ -82,13 +98,10 @@ async def chat(
 ):
     image_path = None
     if image:
-        # Save temp image
-        image_path = f"temp_{image.filename}"
-        with open(image_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+        image_path = _save_upload_to_temp(image)
             
     try:
-        result = agent.process_message(message, image_path)
+        result = await run_in_threadpool(agent.process_message, message, image_path)
         if isinstance(result, dict):
             return result
         return {"response": str(result), "logs": []}

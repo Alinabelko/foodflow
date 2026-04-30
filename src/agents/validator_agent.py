@@ -44,5 +44,27 @@ class ValidatorAgent(BaseAgent):
             return response.choices[0].message.parsed
         except Exception as e:
             print(f"Validator Error: {e}")
-            # Fallback or error handling
-            return ValidationReport(results=[])
+            issue = f"Validation API failed closed: {e}"
+            return ValidationReport(results=[
+                {
+                    "meal_type": "breakfast",
+                    "dish_name": plan.breakfast.dish_name,
+                    "is_valid": False,
+                    "issues": [issue],
+                    "score": 0,
+                },
+                {
+                    "meal_type": "lunch",
+                    "dish_name": plan.lunch.dish_name,
+                    "is_valid": False,
+                    "issues": [issue],
+                    "score": 0,
+                },
+                {
+                    "meal_type": "dinner",
+                    "dish_name": plan.dinner.dish_name,
+                    "is_valid": False,
+                    "issues": [issue],
+                    "score": 0,
+                },
+            ])

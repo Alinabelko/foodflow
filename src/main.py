@@ -1,11 +1,14 @@
 import os
 import logging
+import asyncio
+import tempfile
+from pathlib import Path
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
 from data_manager import DataManager
-from agent import NutritionAgent
+from agents.router_agent import RouterAgent
 
 # Load env
 load_dotenv()
@@ -18,7 +21,25 @@ logging.basicConfig(
 
 # Initialize systems
 dm = DataManager()
-agent = NutritionAgent(dm)
+agent = RouterAgent(dm)
+
+def _agent_response_text(result) -> str:
+    if isinstance(result, dict):
+        return str(result.get("response", ""))
+    return str(result)
+
+def _photo_suffix(file_path: str = "") -> str:
+    suffix = Path(file_path or "").suffix.lower()
+    return suffix if suffix and len(suffix) <= 10 else ".jpg"
+
+def _new_photo_temp_path(file_path: str = "") -> str:
+    temp_file = tempfile.NamedTemporaryFile(
+        delete=False,
+        prefix="foodflow_telegram_",
+        suffix=_photo_suffix(file_path),
+    )
+    temp_file.close()
+    return temp_file.name
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
@@ -31,24 +52,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     
     # Process with Agent
-    response = agent.process_message(user_text)
+    result = await asyncio.to_thread(agent.process_message, user_text)
+    response = _agent_response_text(result)
     
     await context.bot.send_message(chat_id=chat_id, text=response)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Retrieve photo file
     photo_file = await update.message.photo[-1].get_file()
-    # Save to temp
-    custom_path = f"temp_{photo_file.file_unique_id}.jpg"
+    custom_path = _new_photo_temp_path(getattr(photo_file, "file_path", ""))
     await photo_file.download_to_drive(custom_path)
     
     user_text = update.message.caption or "Analyze this image"
     
-    # Process with Agent (assuming agent handles image path)
-    # Note: Agent needs to implement image reading logic or pass URL if using GPT-4-Vision with URLs
-    # For local files with standard OpenAI lib, we'd base64 encode it in agent.py
     try:
-        response = agent.process_message(user_text, image_path=custom_path)
+        result = await asyncio.to_thread(agent.process_message, user_text, custom_path)
+        response = _agent_response_text(result)
         await context.bot.send_message(chat_id=update.effective_chat.id, text=response)
     finally:
         # Cleanup

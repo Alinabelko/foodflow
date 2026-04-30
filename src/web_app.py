@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import time
 from data_manager import DataManager
-from agent import NutritionAgent
+from agents.router_agent import RouterAgent
 from dotenv import load_dotenv
 
 # Load env for Agent
@@ -14,7 +14,7 @@ st.set_page_config(layout="wide", page_title="FoodFlow Control", page_icon="🥗
 if "dm" not in st.session_state:
     st.session_state.dm = DataManager()
 if "agent" not in st.session_state:
-    st.session_state.agent = NutritionAgent(st.session_state.dm)
+    st.session_state.agent = RouterAgent(st.session_state.dm)
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -107,7 +107,8 @@ with col2:
             message_placeholder.markdown("Thinking... 🧠")
             
             # Call Agent
-            response_text = agent.process_message(prompt)
+            result = agent.process_message(prompt)
+            response_text = result.get("response", "") if isinstance(result, dict) else str(result)
             
             message_placeholder.markdown(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
