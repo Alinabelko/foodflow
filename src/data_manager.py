@@ -9,13 +9,14 @@ class DataManager:
     SCHEMAS = {
         'ingredients.csv': ['name', 'allergy_info', 'preference_text', 'preference_level'],
         'people.csv': ['name', 'health_issues', 'diet_issues', 'goals'],
-        'dishes.csv': ['name', 'user_relation', 'rating', 'comments', 'utility', 'protein', 'calories', 'difficulty', 'ingredients'],
+        'dishes.csv': ['name', 'user_relation', 'rating', 'comments', 'utility', 'protein', 'calories', 'difficulty', 'ingredients', 'is_rotation', 'rotation_frequency', 'rotation_day'],
         'shopping_habits.csv': ['habit_text'],
         'fridge.csv': ['item', 'bought_date', 'expiry_date', 'expected_eat_date'],
-        'pantry.csv': ['item'], # No expiry needed for basic pantry tracking as per request, but good to have presence
+        'pantry.csv': ['item'],
         'freezer.csv': ['item'],
         'recipes.csv': ['name', 'ingredients', 'process'],
         'history.csv': ['item', 'action', 'date', 'quantity', 'calories', 'protein', 'fats', 'carbs'],
+        'nutrition_log.csv': ['date', 'meal_type', 'dish', 'calories', 'protein', 'fats', 'carbs'],
         'meal_plans.csv': ['date', 'meal_type', 'dish_name', 'notes', 'status'],
         'shopping_list.csv': ['item', 'quantity', 'status', 'added_date']
     }

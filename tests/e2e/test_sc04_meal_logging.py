@@ -95,14 +95,9 @@ class TestSC04MealLogging:
             f"History bought: {bought}, Fridge: {fridge}, Pantry: {pantry}"
         )
 
-    @pytest.mark.xfail(
-        reason="Gap SC-04: текущая реализация не убирает ингредиенты из "
-               "fridge.csv при log_history. Требует доработки router_agent.py."
-    )
     def test_inventory_decremented_after_eating(self, agent, isolated_dm):
         """
         После того как съел гречку, её не должно быть в fridge.csv.
-        XFAIL — этот gap зафиксирован в gap_analysis.md (пункт #1).
         """
         seed_fridge(isolated_dm, [{"item": "Гречка"}])
 

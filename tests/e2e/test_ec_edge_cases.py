@@ -238,15 +238,10 @@ class TestEC04ExpiringProduct:
             f"Блюда: {dish_names}, Ответ: {response}"
         )
 
-    @pytest.mark.xfail(
-        reason="Gap EC-04: ValidatorAgent не проверяет hard constraint на "
-               "истекающий срок. Требует доработки context.py + validator_prompt.md."
-    )
     def test_validator_rejects_plan_without_expiring_product(self, agent, isolated_dm):
         """
         ValidatorAgent должен НЕ пропустить план, в котором не использован
-        продукт с истекающим сроком.
-        XFAIL: секция EXPIRING_SOON и hard constraint в валидаторе не реализованы.
+        продукт с истекающим сроком — теперь реализовано через context.py и validator_prompt.md.
         """
         seed_fridge(isolated_dm, [
             {

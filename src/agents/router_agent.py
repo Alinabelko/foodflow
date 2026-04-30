@@ -101,11 +101,47 @@ class RouterAgent(BaseAgent):
                         "required": ["name"]
                     }
                 }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "set_rotation_dish",
+                    "description": "Mark a dish as a regular/rotation meal (e.g. 'add oatmeal as regular breakfast', 'chicken soup is our Sunday dish').",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string", "description": "Dish name"},
+                            "rotation_frequency": {
+                                "type": "string",
+                                "description": "How often: 'daily', 'weekly', 'occasionally'"
+                            },
+                            "rotation_day": {
+                                "type": "string",
+                                "description": "Day of week if applicable: 'monday'–'sunday' or 'any'"
+                            }
+                        },
+                        "required": ["name"]
+                    }
+                }
             }
         ]
 
+    def _remove_from_inventory(self, item_name: str) -> str:
+        """Remove an item by name from fridge, pantry, or freezer (first match)."""
+        removed = []
+        for storage in ('fridge.csv', 'pantry.csv', 'freezer.csv'):
+            rows = self.dm.read_table(storage)
+            # Case-insensitive match
+            match = next(
+                (r for r in rows if item_name.lower() in r.get('item', '').lower()),
+                None
+            )
+            if match:
+                self.dm.remove_entry(storage, 'item', match['item'])
+                removed.append(f"{match['item']} from {storage.replace('.csv', '')}")
+        return f"Removed: {', '.join(removed)}" if removed else "Item not found in inventory."
+
     def _execute_tool_calls(self, tool_calls_list) -> List[Dict]:
-        # Router only handles its own tools natively
         results = []
         for tool_call in tool_calls_list:
             func_name = tool_call.function.name
@@ -118,10 +154,23 @@ class RouterAgent(BaseAgent):
                 else:
                     self.dm.add_entry('people.csv', args)
                     output = "Added new person."
-            
+
             elif func_name == "log_history":
                 self.dm.add_entry('history.csv', args)
                 output = "Logged history."
+                # Gap #1 fix: also write to nutrition_log and remove eaten item from inventory
+                if args.get('action') == 'eaten':
+                    self.dm.add_entry('nutrition_log.csv', {
+                        'date': args.get('date', ''),
+                        'meal_type': args.get('quantity', ''),
+                        'dish': args.get('item', ''),
+                        'calories': args.get('calories', ''),
+                        'protein': args.get('protein', ''),
+                        'fats': args.get('fats', ''),
+                        'carbs': args.get('carbs', ''),
+                    })
+                    inv_result = self._remove_from_inventory(args.get('item', ''))
+                    output += f" {inv_result}"
 
             elif func_name == "save_dish_preference":
                 if self.dm.update_entry('dishes.csv', 'name', args['name'], args):
@@ -129,7 +178,20 @@ class RouterAgent(BaseAgent):
                 else:
                     self.dm.add_entry('dishes.csv', args)
                     output = f"Saved dish preference for {args['name']}."
-            
+
+            elif func_name == "set_rotation_dish":
+                rotation_data = {
+                    'name': args['name'],
+                    'is_rotation': 'true',
+                    'rotation_frequency': args.get('rotation_frequency', 'regularly'),
+                    'rotation_day': args.get('rotation_day', 'any'),
+                }
+                if self.dm.update_entry('dishes.csv', 'name', args['name'], rotation_data):
+                    output = f"Updated {args['name']} as rotation dish."
+                else:
+                    self.dm.add_entry('dishes.csv', rotation_data)
+                    output = f"Saved {args['name']} as rotation dish."
+
             results.append({
                 "tool_call_id": tool_call.id,
                 "output": output
@@ -174,7 +236,12 @@ class RouterAgent(BaseAgent):
         
         user_msg = {"role": "user", "content": user_content}
         self.chat_history.append(user_msg)
-        
+
+        # Gap #6: Truncate chat history to last MAX_HISTORY messages
+        MAX_HISTORY = 50
+        if len(self.chat_history) > MAX_HISTORY:
+            self.chat_history = self.chat_history[-MAX_HISTORY:]
+
         request_messages = system_messages + self.chat_history
         
         try:
@@ -218,12 +285,19 @@ class RouterAgent(BaseAgent):
                 elif tool_call.function.name == "handoff_to_shopping_agent":
                     handoff_occurred = True
                     logs.append("Router: Handing off to Shopping Agent...")
-                    # Shopping agent run logic (assume similar update or just returns msg for now)
-                    res_msg = self.shopping_agent.run(self.chat_history)
-                    # Shopping Agent probably still returns simple Message object unless updated
-                    content = res_msg.content
-                    self.chat_history.append(res_msg)
-                    return {"response": content, "logs": logs}
+                    res = self.shopping_agent.run(self.chat_history)
+                    # Gap #5: ShoppingAgent now returns dict like MenuAgent
+                    if isinstance(res, dict):
+                        content = res.get("content", "")
+                        agent_logs = res.get("logs", [])
+                        logs.extend(agent_logs)
+                        res_msg = {"role": "assistant", "content": content}
+                        self.chat_history.append(res_msg)
+                        return {"response": content, "logs": logs}
+                    else:
+                        content = res.content
+                        self.chat_history.append(res)
+                        return {"response": content, "logs": logs}
 
             if not handoff_occurred:
                 tool_outputs = self._execute_tool_calls(tool_calls)

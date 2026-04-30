@@ -138,51 +138,55 @@ class ShoppingAgent(BaseAgent):
         """
         settings = self.dm.get_settings()
         lang = settings.get("language", "en")
-        
+        logs = []
+
         system_messages = [{"role": "system", "content": self._get_system_prompt(lang)}]
-        
+
         # Context extraction - Shopping needs inventory and Shopping List
         inv = self.dm.get_inventory()
         shopping_list = self.dm.read_table('shopping_list.csv')
-        
+
         context_str = f"Current Inventory: Fridge has {len(inv['fridge'])} items. "
         context_str += f"Current Shopping List has {len(shopping_list)} items: " + \
-                       ", ".join([i['item'] for i in shopping_list[:10]]) # Limit for context
-        
+                       ", ".join([i['item'] for i in shopping_list[:10]])
+
         system_messages.append({"role": "system", "content": context_str})
 
         request_messages = system_messages + chat_history
-        
+
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=request_messages,
                 tools=self._get_tools(),
-                tool_choice="auto" 
+                tool_choice="auto"
             )
         except Exception as e:
-             return {"role": "assistant", "content": f"Error in ShoppingAgent: {str(e)}"}
+            return {"content": f"Error in ShoppingAgent: {str(e)}", "logs": []}
 
         msg = response.choices[0].message
-        
+
         tool_calls = msg.tool_calls
         if tool_calls:
             tool_outputs = self._execute_tool_calls(tool_calls)
-            
+            logs.append(f"ShoppingAgent: executed {len(tool_outputs)} tool(s)")
+
             turn_history = request_messages.copy()
             turn_history.append(msg)
-            
+
             for tool_out in tool_outputs:
                 turn_history.append({
                     "role": "tool",
-                    "tool_call_id": tool_out["tool_call_id"], 
+                    "tool_call_id": tool_out["tool_call_id"],
                     "content": tool_out["output"]
                 })
-            
+                logs.append(f"Shopping Tool: {tool_out['output']}")
+
             final_response = self.client.chat.completions.create(
                 model=self.model,
                 messages=turn_history
             )
-            return final_response.choices[0].message
+            final_msg = final_response.choices[0].message
+            return {"content": final_msg.content, "logs": logs}
         else:
-            return msg
+            return {"content": msg.content, "logs": logs}
