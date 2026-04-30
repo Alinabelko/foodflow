@@ -155,7 +155,6 @@ foodflow/
 ├── src/
 │   ├── server.py              # FastAPI-сервер (REST API)
 │   ├── main.py                # Telegram Bot
-│   ├── agent.py               # Legacy single-agent (deprecated)
 │   ├── data_manager.py        # CRUD для CSV-базы
 │   ├── context.py             # ContextAssembler — снимок состояния для агентов
 │   ├── models.py              # Pydantic-модели (MealPlan, ValidationReport)
